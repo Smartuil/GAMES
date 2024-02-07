@@ -193,9 +193,9 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
                         float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
                         float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
                         z_interpolated *= w_reciprocal;
-                        if (-z_interpolated < depth_sample[eid + k])
+                        if (z_interpolated < depth_sample[eid + k])
                         {   //如果该样本的深度更小，更新样本深度、颜色表
-                            depth_sample[eid + k] = -z_interpolated;
+                            depth_sample[eid + k] = z_interpolated;
                             frame_sample[eid + k] = t.getColor() / 4;//这里直接除以4，之后就不用再除了，直接四个样本颜色相加即可保证光强不变
                         }
                         mindep = std::min(depth_sample[eid + k], mindep);
