@@ -147,27 +147,65 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t) {
         aabb_maxy = p.y() > aabb_maxy ? p.y() : aabb_maxy;
     }
 
-    // iterate through the pixel and find if the current pixel is inside the triangle
+    bool MSAA = true;
 
-    for(int x = (int)aabb_minx;x < aabb_maxx;x++)
+    if(!MSAA)
     {
-        for (int y = (int)aabb_miny; y < aabb_maxy; y++)
+        // iterate through the pixel and find if the current pixel is inside the triangle
+        for (int x = (int) aabb_minx; x < aabb_maxx; x++) {
+            for (int y = (int) aabb_miny; y < aabb_maxy; y++) {
+                if (!insideTriangle(x, y, t.v)) continue;
+                // If so, use the following code to get the interpolated z value.
+                auto [alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
+                float w_reciprocal = 1.0 / (alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                float z_interpolated =
+                        alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                z_interpolated *= w_reciprocal;
+
+                int buf_index = get_index(x, y);
+
+                if (z_interpolated >= depth_buf[buf_index]) continue;
+
+                depth_buf[buf_index] = z_interpolated;
+
+                // TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
+                set_pixel(Vector3f(x, y, 1), t.getColor());
+            }
+        }
+    }
+    else
+    {
+        std::vector<float> a{0.25,0.25,0.75,0.75,0.25};
+        Vector3f color; //color at each vertex;
+        float mindep = INT_MAX, count = 0, eid;
+        // iterate through the pixel and find if the current pixel is inside the triangle
+        for(int i = aabb_minx; i <= aabb_maxx; i++)
         {
-            if(!insideTriangle(x,y,t.v)) continue;
-            // If so, use the following code to get the interpolated z value.
-            auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
-            float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
-            float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
-            z_interpolated *= w_reciprocal;
-
-            int buf_index = get_index(x,y);
-
-            if(z_interpolated >= depth_buf[buf_index]) continue;
-
-            depth_buf[buf_index] = z_interpolated;
-
-            // TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
-            set_pixel(Vector3f(x,y,1),t.getColor());
+            for(int j = aabb_miny; j <= aabb_maxy; j++)
+            {   //遍历bounding box像素
+                count = 0; mindep = INT_MAX, eid = get_index(i,j)*4;
+                for(int k = 0; k < 4; k++)
+                {   //遍历像素的每个样本
+                    if(insideTriangle(i+a[k], j+a[k+1], t.v))
+                    {   //如果样本在三角形内
+                        // If so, use the following code to get the interpolated z value.
+                        auto[alpha, beta, gamma] = computeBarycentric2D(i+a[k], j+a[k+1], t.v);
+                        float w_reciprocal = 1.0/(alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+                        float z_interpolated = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+                        z_interpolated *= w_reciprocal;
+                        if (-z_interpolated < depth_sample[eid + k])
+                        {   //如果该样本的深度更小，更新样本深度、颜色表
+                            depth_sample[eid + k] = -z_interpolated;
+                            frame_sample[eid + k] = t.getColor() / 4;//这里直接除以4，之后就不用再除了，直接四个样本颜色相加即可保证光强不变
+                        }
+                        mindep = std::min(depth_sample[eid + k], mindep);
+                    }
+                }
+                // TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
+                color = frame_sample[eid] + frame_sample[eid + 1] + frame_sample[eid + 2] + frame_sample[eid + 3];
+                set_pixel({i,j,1}, color);
+                depth_buf[get_index(i,j)] = std::min(depth_buf[get_index(i,j)], mindep);
+            }
         }
     }
 }
@@ -192,10 +230,12 @@ void rst::rasterizer::clear(rst::Buffers buff)
     if ((buff & rst::Buffers::Color) == rst::Buffers::Color)
     {
         std::fill(frame_buf.begin(), frame_buf.end(), Eigen::Vector3f{0, 0, 0});
+        std::fill(frame_sample.begin(), frame_sample.end(), Eigen::Vector3f{0, 0, 0});
     }
     if ((buff & rst::Buffers::Depth) == rst::Buffers::Depth)
     {
         std::fill(depth_buf.begin(), depth_buf.end(), std::numeric_limits<float>::infinity());
+        std::fill(depth_sample.begin(), depth_sample.end(), std::numeric_limits<float>::infinity());
     }
 }
 
@@ -203,6 +243,8 @@ rst::rasterizer::rasterizer(int w, int h) : width(w), height(h)
 {
     frame_buf.resize(w * h);
     depth_buf.resize(w * h);
+    frame_sample.resize(w * h * 4);
+    depth_sample.resize(w * h * 4);
 }
 
 int rst::rasterizer::get_index(int x, int y)
