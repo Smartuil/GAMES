@@ -48,10 +48,20 @@ void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window)
 {
     // TODO: Iterate through all t = 0 to t = 1 with small steps, and call de Casteljau's 
     // recursive Bezier algorithm.
+    float max_dist = 1.5f * sqrt(2);
     for (double t = 0.0; t <= 1.0; t += 0.001)
     {
         auto point = recursive_bezier(control_points, t);
-        window.at<cv::Vec3b>(point.y, point.x)[1] = 255;
+        for (int i = round(point.x) - 1; i < round(point.x) + 2; i++) {
+            for (int j = round(point.y) - 1; j < round(point.y) + 2; j++) {
+                auto sample_point = cv::Point2f(i, j);
+                float d = cv::norm(sample_point - point);
+                std::cout << d << std::endl;
+                float rgb = (1.0f - (d / max_dist)) * 255.0f;
+                float old_rgb = window.at<cv::Vec3b>(sample_point.y, sample_point.x)[1];
+                window.at<cv::Vec3b>(sample_point.y, sample_point.x)[1] = old_rgb < rgb ? rgb : old_rgb;
+            }
+        }
     }
 }
 
