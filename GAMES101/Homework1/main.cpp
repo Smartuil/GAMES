@@ -61,6 +61,26 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
     return projection;
 }
 
+/* 绕任意轴旋转矩阵 */
+Eigen::Matrix4f get_axis_model_matrix(float rotation_angle, Eigen::Vector3f axis)
+{
+    float angle = rotation_angle / 180 * MY_PI;
+    Eigen::Matrix3f N = Eigen::Matrix3f::Identity();
+    N <<    0,          -axis.z(),  axis.y(),
+            axis.z(),   0,          -axis.x(),
+            -axis.y(),  axis.x(),   0;
+
+    Eigen::Matrix3f rod = std::cos(angle) * Eigen::Matrix3f::Identity() + (1 - std::cos(angle)) * axis * axis.transpose() + std::sin(angle) * N;
+    Eigen::Matrix4f model = Eigen::Matrix4f::Identity();
+
+    model <<    rod(0, 0), rod(0, 1), rod(0, 2), 0,
+                rod(1, 0), rod(1, 1), rod(1, 2), 0,
+                rod(2, 0), rod(2, 1), rod(2, 2), 0,
+                0,         0,         0,         1;
+
+    return model;
+}
+
 int main(int argc, const char** argv)
 {
     float angle = 0;
