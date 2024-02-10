@@ -217,21 +217,31 @@ void Renderer::Render(const Scene& scene)
 
     // Use this variable as the eye position to start your rays.
     Vector3f eye_pos(0);
+    float pixel_width = 1.0f;
+    float offset = pixel_width * 0.5f;
     int m = 0;
     for (int j = 0; j < scene.height; ++j)
     {
         for (int i = 0; i < scene.width; ++i)
         {
-            // generate primary ray direction
-            float x;
-            float y;
+            // 先归一化到 (0, 1)
+            auto norm_x = ((i * pixel_width) + offset) / scene.width;
+            auto norm_y = ((j * pixel_width) + offset) / scene.height;
+            // 转换到 (-1 , 1)
+            norm_x = norm_x * 2 - 1;
+            norm_y = norm_y * 2 - 1;
+            // scale 表示 near 平面拖远之后，成像平面应该缩放的倍数
+            // imageAspectRatio 表示宽高比，因为不一定是 1:1 ，而前面归一化成为了正方形
+            float x = norm_x * scale * imageAspectRatio;
+            // 最终需要 * -1,因为光栅化空间坐标是从左上角为 （0，0）,正常是左下角为 （0，0），需要翻转下 y 轴
+            float y = norm_y * scale * -1;
             // TODO: Find the x and y positions of the current pixel to get the direction
             // vector that passes through it.
             // Also, don't forget to multiply both of them with the variable *scale*, and
             // x (horizontal) variable with the *imageAspectRatio*            
 
             Vector3f dir = Vector3f(x, y, -1); // Don't forget to normalize this direction!
-            framebuffer[m++] = castRay(eye_pos, dir, scene, 0);
+            framebuffer[m++] = castRay(eye_pos, normalize(dir), scene, 0);
         }
         UpdateProgress(j / (float)scene.height);
     }
